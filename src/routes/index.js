@@ -2,7 +2,8 @@
 
 // Routers
 exports.routerFiles = [
-    "./example.js",
+    "./rooms.js",
+    "./submissions.js",
     "./swagger.js",
 ];
 

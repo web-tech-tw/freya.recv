@@ -1,7 +1,7 @@
 "use strict";
 // Constants
 
-exports.APP_NAME = "template.recv";
+exports.APP_NAME = "freya.recv";
 exports.APP_DESCRIPTION = "A tiny but powerful microservice framework.";
 
 exports.APP_VERSION = "latest";
