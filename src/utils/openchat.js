@@ -81,7 +81,7 @@ async function parseTicketPage(pageUrl, isFlush = false) {
     const inners = $("*[class$='Inner']");
     const backgroundImage = inners.eq(0).
         css("background-image")?.
-        replace(/url\((.*)\)/, "$1") || "";
+        replace(/url\(['"]?(.*?)['"]?\)/, "$1") || "";
 
     // Return the parsed data
     return {
