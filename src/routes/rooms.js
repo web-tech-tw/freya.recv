@@ -225,6 +225,46 @@ router.get("/:code",
     }),
 );
 
+router.patch("/:code",
+    middlewareValidator.param("code").isString().notEmpty(),
+    middlewareInspector,
+    withAwait(async (req, res) => {
+        // Get room code
+        const code = req.params.code;
+
+        // Find room
+        const room = await Room.findOne({code}).exec();
+        if (!room) {
+            res.
+                status(StatusCodes.NOT_FOUND).
+                send({
+                    error: "Room not found",
+                });
+            return;
+        }
+
+        // Update room
+        const pageUrl = room.pageUrl;
+        const roomUpdated = await utilOpenchat.parseTicketPage(pageUrl);
+
+        // Handle room data
+        Object.assign(room, roomUpdated);
+
+        // Save room
+        const roomData = (await room.save()).
+            toObject();
+
+        // Send response
+        res.send({
+            label: roomData.label,
+            members: roomData.members,
+            description: roomData.description,
+            backgroundImage: roomData.backgroundImage,
+            pageUrl: roomData.pageUrl,
+        });
+    }),
+);
+
 router.get("/:roomCode/submissions/:code",
     middlewareAccess(null),
     middlewareValidator.param("roomCode").isString().notEmpty(),
