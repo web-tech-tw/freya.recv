@@ -45,7 +45,7 @@ function isValidTicketPageUrl(pageUrl) {
 }
 
 /**
- * Parse the ticket page of LINE OpenChat (LINE Group v2).
+ * Parse the ticket page of LINE OpenChat (LINE Square for Taiwan, Group v2).
  * @param {string} pageUrl - The URL of the ticket page.
  * @param {boolean} isFlush - Flush the cache or not.
  * @return {Promise<Object>} - The parsed data.
