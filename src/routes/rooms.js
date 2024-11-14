@@ -139,6 +139,7 @@ router.patch(
                 send({
                     error: "Invalid pairing hash",
                 });
+            return;
         }
 
         // Check if the room already exists
@@ -185,7 +186,6 @@ router.patch(
             ...roomData,
             administrators: [userId],
             code: pairingCode,
-            pageUrl,
         });
 
         // Save room

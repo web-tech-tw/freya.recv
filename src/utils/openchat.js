@@ -89,6 +89,7 @@ async function parseTicketPage(pageUrl, isFlush = false) {
         members,
         description,
         backgroundImage,
+        pageUrl,
     };
 }
 
