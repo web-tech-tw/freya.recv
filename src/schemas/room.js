@@ -37,6 +37,10 @@ const schema = new Schema({
         required: true,
         unique: true,
     },
+    creator: {
+        type: ObjectId,
+        required: true,
+    },
     administrators: {
         type: [ObjectId],
         required: true,

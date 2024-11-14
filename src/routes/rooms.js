@@ -184,6 +184,7 @@ router.patch(
         // Create room
         const room = new Room({
             ...roomData,
+            creator: userId,
             administrators: [userId],
             code: pairingCode,
         });
