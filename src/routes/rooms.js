@@ -432,7 +432,7 @@ router.patch("/invitations/:invitationId",
         cache.del(`invitation:${invitationId}`);
 
         // Check if the user is an administrator
-        if (room.administrators.includes(userId)) {
+        if (room.administrators.map((i) => i.toString()).includes(userId)) {
             res.
                 status(StatusCodes.CONFLICT).
                 send({
@@ -491,7 +491,7 @@ router.delete("/invitations/:invitationId",
 
         // Check operator
         if (
-            room.creator !== userId &&
+            room.creator.toString() !== userId &&
             invitation.email !== req.auth.metadata.profile.email
         ) {
             res.
@@ -541,7 +541,7 @@ router.delete("/:roomCode/administrators/:userId",
         }
 
         // Check if the user is the creator
-        if (room.creator === userIdTarget) {
+        if (room.creator.toString() === userIdTarget) {
             res.
                 status(StatusCodes.FORBIDDEN).
                 send({
@@ -552,7 +552,7 @@ router.delete("/:roomCode/administrators/:userId",
 
         // Administrators only allowed to remove itself
         if (
-            userId !== room.creator &&
+            userId !== room.creator.toString() &&
             userId !== userIdTarget
         ) {
             res.
@@ -565,7 +565,7 @@ router.delete("/:roomCode/administrators/:userId",
 
         // Remove administrator
         room.administrators = room.administrators.filter(
-            (administrator) => administrator !== userIdTarget,
+            (administrator) => administrator.toString() !== userIdTarget,
         );
 
         // Save room
