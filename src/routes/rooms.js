@@ -6,6 +6,7 @@ const {StatusCodes} = require("http-status-codes");
 const {getMust} = require("../config");
 
 const {useApp, withAwait, express} = require("../init/express");
+const {useCache} = require("../init/cache");
 
 const middlewareAccess = require("../middleware/access");
 const middlewareValidator = require("express-validator");
@@ -13,6 +14,7 @@ const middlewareInspector = require("../middleware/inspector");
 const middlewareRestrictor = require("../middleware/restrictor");
 
 const utilOpenchat = require("../utils/openchat");
+const utilMailSender = require("../utils/mail_sender");
 
 const shortid = require("shortid");
 
@@ -20,6 +22,7 @@ const Room = require("../models/room");
 const Submission = require("../models/submission");
 
 // Read config
+const inteHost = getMust("FREYA_INTE_HOST");
 const pairingSecret = getMust("FREYA_PAIRING_SECRET");
 
 // Define hmac function - SHA256
@@ -76,7 +79,7 @@ router.post(
         // Check if the room already exists
         if (await Room.findOne({pageUrl})) {
             res.
-                status(StatusCodes.FORBIDDEN).
+                status(StatusCodes.CONFLICT).
                 send({
                     error: "Room already exists",
                 });
@@ -145,7 +148,7 @@ router.patch(
         // Check if the room already exists
         if (await Room.findOne({pageUrl})) {
             res.
-                status(StatusCodes.FORBIDDEN).
+                status(StatusCodes.CONFLICT).
                 send({
                     error: "Room already exists",
                 });
@@ -227,14 +230,23 @@ router.get("/:code",
 );
 
 router.patch("/:code",
+    middlewareAccess(null),
     middlewareValidator.param("code").isString().notEmpty(),
     middlewareInspector,
     withAwait(async (req, res) => {
+        // Get user ID
+        const userId = req.auth.id;
+
         // Get room code
         const code = req.params.code;
 
         // Find room
-        const room = await Room.findOne({code}).exec();
+        const room = await Room.findOne({
+            code,
+            administrators: {
+                $in: [userId],
+            },
+        }).exec();
         if (!room) {
             res.
                 status(StatusCodes.NOT_FOUND).
@@ -263,6 +275,304 @@ router.patch("/:code",
             backgroundImage: roomData.backgroundImage,
             pageUrl: roomData.pageUrl,
         });
+    }),
+);
+
+router.delete("/:code",
+    middlewareAccess(null),
+    middlewareValidator.param("code").isString().notEmpty(),
+    middlewareInspector,
+    withAwait(async (req, res) => {
+        // Get user ID
+        const userId = req.auth.id;
+
+        // Get room code
+        const code = req.params.code;
+
+        // Find room
+        const room = await Room.findOne({
+            code,
+            creator: userId,
+        }).exec();
+        if (!room) {
+            res.
+                status(StatusCodes.NOT_FOUND).
+                send({
+                    error: "Room not found",
+                });
+            return;
+        }
+
+        // Delete room
+        await room.delete();
+
+        // Send response
+        res.sendStatus(StatusCodes.NO_CONTENT);
+    }),
+);
+
+router.post("/:roomCode/administrators",
+    middlewareAccess(null),
+    middlewareValidator.param("roomCode").isString().notEmpty(),
+    middlewareValidator.body("email").isEmail().notEmpty(),
+    middlewareInspector,
+    withAwait(async (req, res) => {
+        // Get user ID
+        const userId = req.auth.id;
+
+        // Get request data
+        const email = req.body.email.toLowerCase();
+        const roomCode = req.params.roomCode;
+
+        // Find room
+        const room = await Room.findOne({
+            code: roomCode,
+            creator: userId,
+        }).exec();
+        if (!room) {
+            res.
+                status(StatusCodes.NOT_FOUND).
+                send({
+                    error: "Room not found",
+                });
+            return;
+        }
+
+        // Generate an invitation
+        const invitationId = shortid.generate();
+        const invitationTimestamp = Date.now();
+
+        const invitation = {
+            email,
+            roomCode,
+            timestamp: invitationTimestamp,
+        };
+
+        // Save invitation
+        const cache = useCache();
+        cache.set(`invitation:${invitationId}`, invitation, 86400);
+
+        // Get room name
+        const roomName = room.label;
+
+        // Get user name
+        const userName = req.auth.metadata.profile.nickname;
+
+        // Get invitation URL
+        const invitationUrl = `${inteHost}/#/ti/g2a/${invitationId}`;
+
+        // Get invitation datetime
+        const invitationDatetime = new Date(invitationTimestamp).toISOString();
+
+        // Send an invitation email
+        await utilMailSender("room_invitation", {
+            to: email,
+            userName,
+            roomName,
+            invitationUrl,
+            invitationDatetime,
+        });
+
+        // Send response
+        res.sendStatus(StatusCodes.CREATED);
+    }),
+);
+
+router.patch("/invitations/:invitationId",
+    middlewareAccess(null),
+    middlewareValidator.param("invitationId").isString().notEmpty(),
+    middlewareInspector,
+    withAwait(async (req, res) => {
+        // Get user ID
+        const userId = req.auth.id;
+
+        // Get user email
+        const userEmail = req.auth.metadata.profile.email;
+
+        // Get request data
+        const invitationId = req.params.invitationId;
+
+        // Fine invitation
+        const cache = useCache();
+        const invitation = cache.get(`invitation:${invitationId}`);
+        if (!invitation) {
+            res.
+                status(StatusCodes.NOT_FOUND).
+                send({
+                    error: "Invitation not found",
+                });
+            return;
+        }
+
+        // Get room code
+        const roomCode = invitation.roomCode;
+
+        // Find room
+        const room = await Room.findOne({code: roomCode}).exec();
+        if (!room) {
+            res.
+                status(StatusCodes.NOT_FOUND).
+                send({
+                    error: "Room not found",
+                });
+            return;
+        }
+
+        // Check email
+        if (invitation.email !== userEmail) {
+            res.
+                status(StatusCodes.FORBIDDEN).
+                send({
+                    error: "Invalid email",
+                });
+            return;
+        }
+
+        // Remove invitation
+        cache.del(`invitation:${invitationId}`);
+
+        // Check if the user is an administrator
+        if (room.administrators.includes(userId)) {
+            res.
+                status(StatusCodes.CONFLICT).
+                send({
+                    error: "Already an administrator",
+                });
+            return;
+        }
+
+        // Add administrator
+        room.administrators.push(userId);
+
+        // Save room
+        await room.save();
+
+        // Send response
+        res.sendStatus(StatusCodes.CREATED);
+    }),
+);
+
+router.delete("/invitations/:invitationId",
+    middlewareAccess(null),
+    middlewareValidator.param("invitationId").isString().notEmpty(),
+    middlewareInspector,
+    withAwait(async (req, res) => {
+        // Get user ID
+        const userId = req.auth.id;
+
+        // Get request data
+        const invitationId = req.params.invitationId;
+
+        // Fine invitation
+        const cache = useCache();
+        const invitation = cache.get(`invitation:${invitationId}`);
+        if (!invitation) {
+            res.
+                status(StatusCodes.NOT_FOUND).
+                send({
+                    error: "Invitation not found",
+                });
+            return;
+        }
+
+        // Get room code
+        const roomCode = invitation.roomCode;
+
+        // Find room
+        const room = await Room.findOne({code: roomCode}).exec();
+        if (!room) {
+            res.
+                status(StatusCodes.NOT_FOUND).
+                send({
+                    error: "Room not found",
+                });
+            return;
+        }
+
+        // Check operator
+        if (
+            room.creator !== userId &&
+            invitation.email !== req.auth.metadata.profile.email
+        ) {
+            res.
+                status(StatusCodes.FORBIDDEN).
+                send({
+                    error: "Invalid operator",
+                });
+            return;
+        }
+
+        // Remove invitation
+        cache.del(`invitation:${invitationId}`);
+
+        // Send response
+        res.sendStatus(StatusCodes.NO_CONTENT);
+    }),
+);
+
+router.delete("/:roomCode/administrators/:userId",
+    middlewareAccess(null),
+    middlewareValidator.param("roomCode").isString().notEmpty(),
+    middlewareValidator.param("userId").isMongoId().notEmpty(),
+    middlewareInspector,
+    withAwait(async (req, res) => {
+        // Get user ID
+        const userId = req.auth.id;
+
+        // Get request data
+        const userIdTarget = req.params.userId;
+        const roomCode = req.params.roomCode;
+
+        // Find room
+        const room = await Room.findOne({
+            code: roomCode,
+            creator: userId,
+            administrators: {
+                $in: [userIdTarget],
+            },
+        }).exec();
+        if (!room) {
+            res.
+                status(StatusCodes.NOT_FOUND).
+                send({
+                    error: "Room not found",
+                });
+            return;
+        }
+
+        // Check if the user is the creator
+        if (room.creator === userIdTarget) {
+            res.
+                status(StatusCodes.FORBIDDEN).
+                send({
+                    error: "Creator cannot be removed",
+                });
+            return;
+        }
+
+        // Administrators only allowed to remove itself
+        if (
+            userId !== room.creator &&
+            userId !== userIdTarget
+        ) {
+            res.
+                status(StatusCodes.FORBIDDEN).
+                send({
+                    error: "Invalid operator",
+                });
+            return;
+        }
+
+        // Remove administrator
+        room.administrators = room.administrators.filter(
+            (administrator) => administrator !== userIdTarget,
+        );
+
+        // Save room
+        await room.save();
+
+        // Send response
+        res.sendStatus(StatusCodes.NO_CONTENT);
     }),
 );
 

@@ -11,3 +11,5 @@ exports.APP_AUTHOR_URL = "https://web-tech.tw";
 
 exports.OPENAPI_EXPORTED_FILENAME = "openapi_exported.json";
 exports.PUBLIC_KEY_FILENAME = "keypair_public.pem";
+
+exports.TEST_EMAIL_DOMAIN = "web-tech-tw.github.io";
