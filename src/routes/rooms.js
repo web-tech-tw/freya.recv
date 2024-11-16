@@ -200,15 +200,20 @@ router.patch(
     }),
 );
 
-router.get("/:code",
-    middlewareValidator.param("code").isString().notEmpty(),
+router.get("/:roomCode",
+    middlewareValidator.param("roomCode").isString().notEmpty(),
     middlewareInspector,
     withAwait(async (req, res) => {
+        // Get user ID
+        const userId = req.auth.id;
+
         // Get room code
-        const code = req.params.code;
+        const roomCode = req.params.roomCode;
 
         // Find room
-        const room = await Room.findOne({code}).exec();
+        const room = await Room.findOne({
+            code: roomCode,
+        }).exec();
         if (!room) {
             res.
                 status(StatusCodes.NOT_FOUND).
@@ -218,31 +223,43 @@ router.get("/:code",
             return;
         }
 
+        // Define room data
+        const roomData = {};
+
+        // Append sensitive data
+        const isAdministrator = room.administrators.some(
+            (administrator) => administrator.toString() === userId,
+        );
+        if (isAdministrator) {
+            Object.assign(roomData, room.toObject());
+        } else {
+            const {
+                label, members, description, backgroundImage, pageUrl,
+            } = room;
+            Object.assign(roomData, {
+                label, members, description, backgroundImage, pageUrl,
+            });
+        }
+
         // Send response
-        res.send({
-            label: room.label,
-            members: room.members,
-            description: room.description,
-            backgroundImage: room.backgroundImage,
-            pageUrl: room.pageUrl,
-        });
+        res.send(roomData);
     }),
 );
 
-router.patch("/:code",
+router.patch("/:roomCode",
     middlewareAccess(null),
-    middlewareValidator.param("code").isString().notEmpty(),
+    middlewareValidator.param("roomCode").isString().notEmpty(),
     middlewareInspector,
     withAwait(async (req, res) => {
         // Get user ID
         const userId = req.auth.id;
 
         // Get room code
-        const code = req.params.code;
+        const roomCode = req.params.roomCode;
 
         // Find room
         const room = await Room.findOne({
-            code,
+            code: roomCode,
             administrators: {
                 $in: [userId],
             },
@@ -278,20 +295,20 @@ router.patch("/:code",
     }),
 );
 
-router.delete("/:code",
+router.delete("/:roomCode",
     middlewareAccess(null),
-    middlewareValidator.param("code").isString().notEmpty(),
+    middlewareValidator.param("roomCode").isString().notEmpty(),
     middlewareInspector,
     withAwait(async (req, res) => {
         // Get user ID
         const userId = req.auth.id;
 
         // Get room code
-        const code = req.params.code;
+        const roomCode = req.params.roomCode;
 
         // Find room
         const room = await Room.findOne({
-            code,
+            code: roomCode,
             creator: userId,
         }).exec();
         if (!room) {
@@ -378,6 +395,60 @@ router.post("/:roomCode/administrators",
     }),
 );
 
+router.get("/invitations/:invitationId",
+    middlewareAccess(null),
+    middlewareValidator.param("invitationId").isString().notEmpty(),
+    middlewareInspector,
+    withAwait(async (req, res) => {
+        // Get user email
+        const userEmail = req.auth.metadata.profile.email;
+
+        // Get request data
+        const invitationId = req.params.invitationId;
+
+        // Fine invitation
+        const cache = useCache();
+        const invitation = cache.get(`invitation:${invitationId}`);
+        if (!invitation) {
+            res.
+                status(StatusCodes.NOT_FOUND).
+                send({
+                    error: "Invitation not found",
+                });
+            return;
+        }
+
+        // Check email
+        if (invitation.email !== userEmail) {
+            res.
+                status(StatusCodes.FORBIDDEN).
+                send({
+                    error: "Invalid email",
+                });
+            return;
+        }
+
+        // Get room code
+        const roomCode = invitation.roomCode;
+
+        // Find room
+        const room = await Room.findOne({
+            code: roomCode,
+        }).exec();
+        if (!room) {
+            res.
+                status(StatusCodes.NOT_FOUND).
+                send({
+                    error: "Room not found",
+                });
+            return;
+        }
+
+        // Send response
+        res.send({room, invitation});
+    }),
+);
+
 router.patch("/invitations/:invitationId",
     middlewareAccess(null),
     middlewareValidator.param("invitationId").isString().notEmpty(),
@@ -404,20 +475,6 @@ router.patch("/invitations/:invitationId",
             return;
         }
 
-        // Get room code
-        const roomCode = invitation.roomCode;
-
-        // Find room
-        const room = await Room.findOne({code: roomCode}).exec();
-        if (!room) {
-            res.
-                status(StatusCodes.NOT_FOUND).
-                send({
-                    error: "Room not found",
-                });
-            return;
-        }
-
         // Check email
         if (invitation.email !== userEmail) {
             res.
@@ -428,11 +485,30 @@ router.patch("/invitations/:invitationId",
             return;
         }
 
+        // Get room code
+        const roomCode = invitation.roomCode;
+
+        // Find room
+        const room = await Room.findOne({
+            code: roomCode,
+        }).exec();
+        if (!room) {
+            res.
+                status(StatusCodes.NOT_FOUND).
+                send({
+                    error: "Room not found",
+                });
+            return;
+        }
+
         // Remove invitation
         cache.del(`invitation:${invitationId}`);
 
         // Check if the user is an administrator
-        if (room.administrators.map((i) => i.toString()).includes(userId)) {
+        const isAdministrator = room.administrators.some(
+            (administrator) => administrator.toString() === userId,
+        );
+        if (isAdministrator) {
             res.
                 status(StatusCodes.CONFLICT).
                 send({
