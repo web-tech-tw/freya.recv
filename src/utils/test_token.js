@@ -1,10 +1,8 @@
 "use strict";
 // Token utils for testing/debugging or developing.
 
-// Import config
+// Import modules
 const {isProduction} = require("../config");
-
-// Import utils
 const {sha256hex} = require("./native");
 
 // Default fake user
@@ -18,8 +16,6 @@ const DEFAULT_FAKE_USER = {
 
 /**
  * Returns a new user profile
- * @module test_token
- * @function
  * @return {object}
  */
 function newProfile() {
@@ -28,8 +24,6 @@ function newProfile() {
 
 /**
  * Issue token
- * @module test_token
- * @function
  * @param {object} userData - The user data to generate the token for.
  * @return {string}
  */
@@ -58,8 +52,6 @@ function issue(userData) {
 
 /**
  * Validate token
- * @module test_token
- * @function
  * @param {string} token - The token to valid.
  * @return {object}
  */
