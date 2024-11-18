@@ -602,7 +602,6 @@ router.delete("/:roomCode/administrators/:userId",
         // Find room
         const room = await Room.findOne({
             code: roomCode,
-            creator: userId,
             administrators: {
                 $in: [userIdTarget],
             },
