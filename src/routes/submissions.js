@@ -4,7 +4,6 @@ const {getMust} = require("../config");
 const {StatusCodes} = require("http-status-codes");
 const {useApp, withAwait, express} = require("../init/express");
 
-const middlewareAccess = require("../middleware/access");
 const middlewareValidator = require("express-validator");
 const middlewareInspector = require("../middleware/inspector");
 
@@ -23,7 +22,6 @@ const router = newRouter();
 router.use(express.json());
 
 router.post("/",
-    middlewareAccess(null),
     middlewareValidator.body("roomCode").isString(),
     middlewareValidator.body("captcha").isString(),
     middlewareInspector,
