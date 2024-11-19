@@ -205,7 +205,7 @@ router.get("/:roomCode",
     middlewareInspector,
     withAwait(async (req, res) => {
         // Get user ID
-        const userId = req.auth.id;
+        const userId = req.auth?.id;
 
         // Get room code
         const roomCode = req.params.roomCode;
